@@ -2,9 +2,13 @@
 #include <unistd.h>
 #include <thread>
 #include <vector>
+#include <string>
+#include <mutex> 
 
 using std::thread;
 using std::vector;
+using std::string;
+using std::mutex;
 
 enum Direction
 
@@ -64,6 +68,7 @@ bool Snake::canGoDown()
 		return false;
 		}
 	}
+	return true;
 }
 
 bool Snake::canGoRight()
@@ -75,6 +80,7 @@ bool Snake::canGoRight()
 		return false;
 		}
 	}
+	return true;
 }
 
 bool Snake::canGoLeft()
@@ -86,6 +92,7 @@ bool Snake::canGoLeft()
 		return false;
 		}
 	}
+	return true;
 }
 void Snake::moveDirection(Direction direction)
 {
@@ -106,9 +113,10 @@ void Snake::moveDirection(Direction direction)
 		point.X++;
 		break;
 	}
-
+	printf("move...");
 	AllPoints.emplace(AllPoints.cbegin(), point);
 	AllPoints.erase(AllPoints.cend());
+	printf("move...end");
 }
 
 Snake::Snake(int snakeSize)
@@ -207,10 +215,15 @@ void Snake::Move()
 
 void draw_snake(WINDOW *screen);
 void draw_borders(WINDOW *screen);
+Snake* create_snake(WINDOW *screen);
+void draw_single_snake(WINDOW *screen, Snake* snake);
+void start_snake_movement(WINDOW *screen, const char* screenNumber);
+
+mutex mtx;
 
 int main(int argc, char *argv[]) {
-
 	int parent_x, parent_y; 
+	
 	initscr(); 
 	noecho(); 
 	curs_set(FALSE); // wyłączenie widoczności kursora
@@ -219,46 +232,18 @@ int main(int argc, char *argv[]) {
 	WINDOW *half_two = newwin(parent_y/2, parent_x / 2, 0, (parent_x/2));
 	WINDOW *half_three = newwin(parent_y/2,parent_x/2, (parent_y/2),0);
 	WINDOW *half_four = newwin(parent_y/2, parent_x/2, (parent_y/2), (parent_x/2));
- 	// rysowanie ramki 
-	draw_borders(half_one); 
-	draw_borders(half_two); 
-	draw_borders(half_three);
-	draw_borders(half_four);
-
-	draw_snake(half_one);
-	draw_snake(half_two);
-	draw_snake(half_three);
-	draw_snake(half_four);
-
-
-	while(1) { // draw to our windows 
-		clear();
-		mvwprintw(half_one, 1, 1, "1"); 
-		mvwprintw(half_two, 1, 1, "2"); // refresh each window 
-		mvwprintw(half_three, 1, 1, "3");
-		mvwprintw(half_four, 1, 1, "4");
-		//mvwprintw(half_one, a+1, b+1, "o");
-		//mvwprintw(half_two, a+1, b+4, "o");
-		//mvwprintw(half_three, a+1, b+2, "o");
-                //mvwprintw(half_four, a+1, b+3, "o");
-
-
-
-		wrefresh(half_one); 
-		wrefresh(half_two); 
-		wrefresh(half_three);
-		wrefresh(half_four);
-
-		clear();
-
-		usleep(300000);
-
-	} // clean up 
-	delwin(half_one); 
-	delwin(half_two); 
-	delwin(half_three);
-	delwin(half_four);
-	endwin();
+ 	
+	thread sneak_1(start_snake_movement, half_one, "1");
+	
+	thread sneak_2(start_snake_movement, half_two, "2");
+	
+	thread sneak_3(start_snake_movement, half_three, "3");
+	
+	thread sneak_4(start_snake_movement, half_four, "4");
+	
+	sneak_1.join();sneak_2.join();sneak_3.join();sneak_4.join();
+	getch();
+	//endwin();
 	
 	return 0; 
 }
@@ -280,47 +265,44 @@ void draw_borders(WINDOW *screen) {
 	}
 }
 
-void draw_snake(WINDOW *screen) {
-
+Snake* create_snake(WINDOW *screen)
+{
 	int x, y;
         getmaxyx(screen, y, x);
-
 	int snakeSize = 3;
-	Snake* snake1 = new Snake(snakeSize);
-	Snake* snake2 = new Snake(snakeSize);
-	Snake* snake3 = new Snake(snakeSize);
-	Snake* snake4 = new Snake(snakeSize);
-	
 
-	snake1->Min_Y = 1;
-	snake1->Max_Y = ((y/2)-1);
-	snake1->Min_X = 1;
-	snake1->Max_X = ((x/2)-1);
+	Snake* snake = new Snake(snakeSize);
 
-        snake2->Min_Y = 1;
-        snake2->Max_Y = ((y/2)-1);
-        snake2->Min_X = ((x/2)+1);
-        snake2->Max_X = x-1;
+	snake->Min_Y = 1;
+	snake->Max_Y = ((y/2)-1);
+	snake->Min_X = 1;
+	snake->Max_X = ((x/2)-1);
 
-        snake3->Min_Y = ((y/2)+1);
-        snake3->Max_Y = y-1;
-        snake3->Min_X = 1;
-        snake3->Max_X = ((x/2)-1);
-
-        snake1->Min_Y = ((y/2)+1);
-        snake1->Max_Y = y-1;
-        snake1->Min_X = ((x/2)+1);
-        snake1->Max_X = x-1;
-
-	
-		for(Coord point : snake1->AllPoints)
-		{
-			mvwprintw(screen, (point.Y + 3) , (point.X + 3), "o");	
-
-		}
-		move(1,1);
-
-
-
+	return snake;
 }
 
+void draw_single_snake(WINDOW *screen, Snake* snake) 
+{	
+	for(Coord point : snake->AllPoints)
+	{
+		mvwprintw(screen, (point.Y + 3) , (point.X + 3), "o");	
+	}
+}
+
+void start_snake_movement(WINDOW *screen, const char* screenNumber)
+{
+	Snake* snake =  create_snake(screen);
+	
+	while(1) {
+		mtx.lock();
+		draw_borders(screen);
+		clear();
+		mvwprintw(screen, 1, 1, screenNumber); 
+		draw_single_snake(screen, snake);
+		wrefresh(screen); 
+		mtx.unlock();
+		usleep(300000);
+		snake->Move();
+		}
+	delwin(screen); 
+}
